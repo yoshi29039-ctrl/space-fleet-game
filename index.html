@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>宇宙艦隊戦術シミュレーター v0.2</title>
+<style>
+:root{
+  --bg:#030610; --panel:#0a1220; --line:#26334d; --text:#edf4ff;
+  --blue:#5cb0ff; --red:#ff6c7c; --gold:#ffd66e; --green:#7ee29d; --purple:#b98cff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#02040a;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+#app{height:100vh;display:flex;flex-direction:column}
+header{height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:rgba(6,10,20,.96);border-bottom:1px solid var(--line)}
+h1{font-size:17px;margin:0}.sub{font-size:11px;opacity:.65}
+#topbar{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:#09111f;border-bottom:1px solid var(--line)}
+button,select{border:1px solid #354562;background:#111c30;color:white;border-radius:9px;padding:8px 9px;font-size:12px}
+button.active{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+#main{flex:1;display:grid;grid-template-columns:1fr 250px;min-height:0}
+#fieldWrap{position:relative;min-width:0}
+canvas{width:100%;height:100%;display:block;touch-action:none;background:radial-gradient(circle at 50% 38%,#0c1730 0%,#050914 48%,#02040a 100%)}
+#side{background:#08101c;border-left:1px solid var(--line);padding:10px;overflow:auto}
+.panel{background:#0c1525;border:1px solid #273653;border-radius:10px;padding:9px;margin-bottom:9px}
+.panel h3{font-size:13px;margin:0 0 7px}
+.stat{font-size:11px;line-height:1.55;color:#c9d7ed}
+.row{display:flex;justify-content:space-between;gap:8px}
+.badge{display:inline-block;padding:2px 6px;border-radius:20px;font-size:10px;background:#16233a}
+#hint{position:absolute;left:10px;bottom:10px;background:rgba(5,10,20,.82);border:1px solid #273653;border-radius:10px;padding:8px 10px;font-size:11px;max-width:340px}
+#status{position:absolute;top:10px;left:10px;background:rgba(5,10,20,.82);border:1px solid #273653;border-radius:10px;padding:8px 10px;font-size:11px}
+@media(max-width:800px){
+  #main{grid-template-columns:1fr}
+  #side{position:absolute;right:6px;top:130px;width:210px;max-height:46vh;border:1px solid var(--line);border-radius:10px;background:rgba(8,16,28,.94)}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div><h1>宇宙艦隊戦術シミュレーター</h1><div class="sub">Fleet Battle Prototype v0.2</div></div>
+  <div class="sub">400隻級対応</div>
+</header>
+
+<div id="topbar">
+  <button id="load400">400隻艦隊を配置</button>
+  <button id="enemy100">敵100隻艦隊</button>
+  <button id="moveBtn">移動指示</button>
+  <button id="attackBtn">攻撃指定</button>
+  <button id="rangeBtn">射程表示</button>
+  <select id="formation">
+    <option value="convex">凸型</option>
+    <option value="wedge">楔形</option>
+    <option value="line">横陣</option>
+  </select>
+  <button id="formationBtn">陣形変更</button>
+  <button id="pauseBtn">一時停止</button>
+  <button id="resetBtn">リセット</button>
+</div>
+
+<div id="main">
+  <div id="fieldWrap">
+    <canvas id="game"></canvas>
+    <div id="status">艦隊を選択してください</div><div id="compat" style="position:absolute;top:48px;left:10px;background:rgba(255,214,110,.12);border:1px solid rgba(255,214,110,.35);color:#ffe7a3;border-radius:9px;padding:6px 8px;font-size:10px">※ ChatGPT内プレビューで動かない場合はSafariで開いてください</div>
+    <div id="hint">艦隊をタップ → 移動指示 → 移動先をタップ。攻撃指定では敵艦隊をタップ。黄色の円は射程。</div>
+  </div>
+
+  <aside id="side">
+    <div class="panel">
+      <h3>選択部隊</h3>
+      <div id="selectedInfo" class="stat">未選択</div>
+    </div>
+    <div class="panel">
+      <h3>戦況</h3>
+      <div id="battleInfo" class="stat"></div>
+    </div>
+    <div class="panel">
+      <h3>艦種記号</h3>
+      <div class="stat">
+        ◈ アレクサンドリア級<br>
+        ◆ マゼラン級<br>
+        ▰ サラミス級<br>
+        ▲ フリゲート<br>
+        ▼ 駆逐艦<br>
+        ● コルベット<br>
+        ✚ 支援艦<br>
+        ✦ MS部隊
+      </div>
+    </div>
+  </aside>
+</div>
+</div>
+
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const selectedInfo=document.getElementById('selectedInfo'),battleInfo=document.getElementById('battleInfo'),statusEl=document.getElementById('status');
+let W=0,H=0,dpr=1,last=0,paused=false,showRange=false,mode='select',selected=null,stars=[],units=[],nextId=1;
+
+const SHIPS={
+  alexandria:{label:'アレクサンドリア級',symbol:'◈',range:150,power:1.5},
+  magellan:{label:'マゼラン級',symbol:'◆',range:140,power:1.35},
+  salamis:{label:'サラミス級',symbol:'▰',range:120,power:1.0},
+  frigate:{label:'フリゲート',symbol:'▲',range:90,power:.75},
+  destroyer:{label:'駆逐艦',symbol:'▼',range:95,power:.85},
+  corvette:{label:'コルベット',symbol:'●',range:80,power:.55},
+  support:{label:'支援艦',symbol:'✚',range:55,power:.25},
+  ms:{label:'MS部隊',symbol:'✦',range:75,power:.8}
+};
+
+function resize(){
+  const r=canvas.getBoundingClientRect();
+  dpr=Math.min(devicePixelRatio||1,2);
+  canvas.width=r.width*dpr; canvas.height=r.height*dpr;
+  W=r.width;H=r.height;ctx.setTransform(dpr,0,0,dpr,0,0);makeStars();
+}
+window.addEventListener('resize',resize);
+
+function makeStars(){
+  stars=[]; for(let i=0;i<Math.floor(W*H/5000);i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*1.3+.3,a:Math.random()*.55+.2});
+}
+
+function addUnit(team,x,y,name,count,type='salamis',formation='convex'){
+  const s=SHIPS[type];
+  units.push({
+    id:nextId++,team,x,y,name,count,type,formation,hp:100,
+    speed:type==='ms'?55:(type==='corvette'?46:38),
+    range:s.range,power:s.power,target:null,attackTarget:null,cooldown:0
+  });
+}
+
+function reset(){
+  units=[];selected=null;mode='select';
+  addUnit('blue',W*.20,H*.34,'中央本体',28,'alexandria','convex');
+  addUnit('blue',W*.19,H*.57,'第1戦艦戦隊',5,'magellan','wedge');
+  addUnit('red',W*.78,H*.38,'敵先遣艦隊',30,'salamis','convex');
+  addUnit('red',W*.80,H*.62,'敵MS部隊',24,'ms','wedge');
+  refreshPanels();
+}
+
+function load400(){
+  units=units.filter(u=>u.team==='red');
+  const groups=[
+    ['中央本体',28,'alexandria'],
+    ['戦術大隊 第1',40,'magellan'],['戦術大隊 第2',40,'magellan'],['戦術大隊 第3',40,'salamis'],['戦術大隊 第4',40,'salamis'],
+    ['戦術大隊 第5',40,'destroyer'],['戦術大隊 第6',40,'frigate'],['戦術大隊 第7',40,'corvette'],['戦術大隊 第8',40,'salamis'],
+    ['支援群',32,'support'],['MS統制群',20,'ms']
+  ];
+  let total=groups.reduce((a,g)=>a+g[1],0);
+  // normalize to exactly 400
+  groups[9][1]-=(total-400);
+  const cols=3, sx=W*.11, sy=H*.18, dx=Math.min(155,W*.16), dy=Math.min(120,H*.15);
+  groups.forEach((g,i)=>{
+    addUnit('blue',sx+(i%cols)*dx,sy+Math.floor(i/cols)*dy,g[0],g[1],g[2],i%2?'wedge':'convex');
+  });
+  selected=null;statusEl.textContent='400隻艦隊を配置';
+  refreshPanels();
+}
+
+function enemy100(){
+  units=units.filter(u=>u.team==='blue');
+  const parts=[25,25,20,15,15];
+  parts.forEach((c,i)=>addUnit('red',W*.70+(i%2)*120,H*.20+Math.floor(i/2)*130,`ムサイ級群 第${i+1}`,c,'salamis',i%2?'wedge':'convex'));
+  statusEl.textContent='敵100隻艦隊を配置';
+  refreshPanels();
+}
+
+function total(team){return units.filter(u=>u.team===team).reduce((a,u)=>a+u.count,0)}
+
+function refreshPanels(){
+  if(selected){
+    const s=SHIPS[selected.type];
+    selectedInfo.innerHTML=
+      `<div class="row"><b>${selected.name}</b><span class="badge">${selected.team==='blue'?'味方':'敵'}</span></div>`+
+      `${s.label}<br>艦数：${selected.count}<br>HP：${Math.max(0,Math.round(selected.hp))}%<br>陣形：${selected.formation==='convex'?'凸型':selected.formation==='wedge'?'楔形':'横陣'}<br>射程：${selected.range}`;
+  }else selectedInfo.textContent='未選択';
+  battleInfo.innerHTML=`味方総数：${total('blue')}<br>敵総数：${total('red')}<br>味方部隊：${units.filter(u=>u.team==='blue').length}<br>敵部隊：${units.filter(u=>u.team==='red').length}`;
+}
+
+function hit(x,y){
+  let best=null,bd=999;
+  units.forEach(u=>{let d=Math.hypot(u.x-x,u.y-y);if(d<30&&d<bd){best=u;bd=d}});
+  return best;
+}
+
+function pos(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+
+function handleTap(e){
+  if(e.cancelable) e.preventDefault();
+
+  const p=pos(e);
+  if(mode==='move'&&selected){
+    selected.target={x:p.x,y:p.y}; mode='select'; document.getElementById('moveBtn').classList.remove('active'); statusEl.textContent=`${selected.name}：移動中`; return;
+  }
+  if(mode==='attack'&&selected){
+    const t=hit(p.x,p.y);
+    if(t&&t.team!==selected.team){selected.attackTarget=t;mode='select';document.getElementById('attackBtn').classList.remove('active');statusEl.textContent=`${selected.name} → ${t.name} を攻撃`;}
+    return;
+  }
+  selected=hit(p.x,p.y); refreshPanels();
+  statusEl.textContent=selected?`${selected.name}を選択`:'艦隊を選択してください';
+}
+canvas.addEventListener('pointerdown', handleTap, {passive:false});
+canvas.addEventListener('click', handleTap, {passive:false});
+canvas.addEventListener('touchstart', (e)=>{
+  if(e.cancelable) e.preventDefault();
+  const t=e.changedTouches[0];
+  handleTap({clientX:t.clientX, clientY:t.clientY, preventDefault:()=>{}, cancelable:false});
+}, {passive:false});
+
+document.getElementById('moveBtn').onclick=()=>{if(!selected)return statusEl.textContent='先に艦隊を選択';mode='move';document.getElementById('moveBtn').classList.add('active');statusEl.textContent='移動先をタップ';}
+document.getElementById('attackBtn').onclick=()=>{if(!selected)return statusEl.textContent='先に艦隊を選択';mode='attack';document.getElementById('attackBtn').classList.add('active');statusEl.textContent='攻撃対象をタップ';}
+document.getElementById('rangeBtn').onclick=e=>{showRange=!showRange;e.target.classList.toggle('active',showRange)}
+document.getElementById('formationBtn').onclick=()=>{if(!selected)return;selected.formation=document.getElementById('formation').value;refreshPanels()}
+document.getElementById('pauseBtn').onclick=e=>{paused=!paused;e.target.textContent=paused?'再開':'一時停止';e.target.classList.toggle('active',paused)}
+document.getElementById('resetBtn').onclick=reset;
+document.getElementById('load400').onclick=load400;
+document.getElementById('enemy100').onclick=enemy100;
+
+function update(dt){
+  if(paused)return;
+  units.forEach(u=>{
+    if(u.target){
+      const dx=u.target.x-u.x,dy=u.target.y-u.y,d=Math.hypot(dx,dy);
+      if(d<4)u.target=null; else{u.x+=dx/d*u.speed*dt;u.y+=dy/d*u.speed*dt}
+    }
+    if(u.attackTarget && units.includes(u.attackTarget)){
+      const t=u.attackTarget,dx=t.x-u.x,dy=t.y-u.y,d=Math.hypot(dx,dy);
+      if(d>u.range*.85){u.x+=dx/d*u.speed*.7*dt;u.y+=dy/d*u.speed*.7*dt}
+      if(d<=u.range && u.cooldown<=0){
+        t.hp-=Math.max(.8,u.count*u.power*.018);u.cooldown=.22;
+      }
+    }
+    u.cooldown=Math.max(0,u.cooldown-dt);
+  });
+  units.forEach(u=>{if(u.hp<100)u.count=Math.max(0,Math.ceil(u.count*(u.hp/100)));});
+  units=units.filter(u=>u.hp>0&&u.count>0);
+  if(selected&&!units.includes(selected))selected=null;
+  refreshPanels();
+}
+
+function drawBg(){
+  ctx.clearRect(0,0,W,H);
+  for(const s of stars){ctx.globalAlpha=s.a;ctx.fillStyle='#d9e7ff';ctx.fillRect(s.x,s.y,s.s,s.s)}
+  ctx.globalAlpha=1;ctx.strokeStyle='rgba(85,120,170,.08)';
+  for(let x=0;x<W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+  for(let y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+}
+
+function drawUnit(u){
+  const c=u.team==='blue'?'#5cb0ff':'#ff6c7c';
+  if(showRange&&selected===u){ctx.strokeStyle='rgba(255,214,110,.35)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(u.x,u.y,u.range,0,Math.PI*2);ctx.stroke()}
+  if(u.target){ctx.strokeStyle=c+'66';ctx.setLineDash([6,6]);ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(u.target.x,u.target.y);ctx.stroke();ctx.setLineDash([])}
+  if(selected===u){ctx.strokeStyle='#ffd66e';ctx.lineWidth=2;ctx.beginPath();ctx.arc(u.x,u.y,26,0,Math.PI*2);ctx.stroke()}
+  ctx.fillStyle=c;ctx.font='24px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(SHIPS[u.type].symbol,u.x,u.y);
+  // formation indicator
+  ctx.strokeStyle=c;ctx.lineWidth=1.3;
+  if(u.formation==='convex'){ctx.strokeRect(u.x-14,u.y-12,28,22);ctx.clearRect(u.x-6,u.y-15,12,8);ctx.strokeRect(u.x-6,u.y-15,12,8)}
+  else if(u.formation==='wedge'){ctx.beginPath();ctx.moveTo(u.x,u.y-16);ctx.lineTo(u.x-16,u.y+14);ctx.moveTo(u.x,u.y-16);ctx.lineTo(u.x+16,u.y+14);ctx.stroke()}
+  else{ctx.beginPath();ctx.moveTo(u.x-18,u.y);ctx.lineTo(u.x+18,u.y);ctx.stroke()}
+  ctx.fillStyle='#eaf2ff';ctx.font='11px -apple-system,sans-serif';ctx.fillText(u.name,u.x,u.y+34);
+  ctx.fillStyle=u.hp<40?'#ffbf69':'#b9cbea';ctx.fillText(`${u.count}隻`,u.x,u.y+48);
+  if(u.attackTarget){
+    ctx.strokeStyle='rgba(255,215,100,.45)';ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(u.attackTarget.x,u.attackTarget.y);ctx.stroke();
+  }
+}
+
+function loop(t){
+  const dt=Math.min((t-last)/1000||0,.05);last=t;update(dt);drawBg();units.forEach(drawUnit);requestAnimationFrame(loop);
+}
+resize();reset();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
