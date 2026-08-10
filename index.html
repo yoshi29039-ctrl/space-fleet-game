@@ -123,7 +123,16 @@ input[type=password],input[type=text]{width:100%;padding:11px;background:#020807
 <div class="panel">
 <h2>SIMULATED TERMINAL</h2>
 <div id="terminal"></div>
-<div id="cmdrow"><input id="cmd" type="text" placeholder="help と入力"><button id="run">RUN</button></div>
+<div style="margin-top:8px;padding:8px;border:1px solid #275f50;border-radius:8px;background:#04100d">
+<div style="font-size:10px;color:#ffd86b">LIVE SIMULATION</div>
+<div style="font-size:10px;color:#abd4c4;margin-top:4px">入力例： <b>scan</b> / <b>connect</b> / <b>decrypt</b> / <b>route</b> / <b>hack</b></div>
+</div>
+<div id="cmdrow"><input id="cmd" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="command >"><button id="run">EXECUTE</button></div>
+<div style="display:flex;gap:6px;margin-top:7px">
+<button id="movieMode" class="warn">MOVIE TYPING: OFF</button>
+<button id="movieReset">演出リセット</button>
+</div>
+<div class="small" style="margin-top:6px">MOVIE TYPINGをONにすると、どの文字キーを押しても架空のコードが自動入力されます。</div>
 <p class="small">演出用の架空ターミナルです。実際の端末・アカウント・ネットワークへ接続しません。</p>
 </div>
 </section>
@@ -385,20 +394,120 @@ document.querySelectorAll("nav button[data-v]").forEach(b=>b.onclick=()=>showVie
 
 /* TERMINAL - FICTIONAL ONLY */
 function term(t,c="#61ffb0"){let d=document.createElement("div");d.textContent="> "+t;d.style.color=c;$("terminal").appendChild(d);$("terminal").scrollTop=$("terminal").scrollHeight}
+let cmdHistory=[],histIndex=-1;
 function runCmd(){
- let q=$("cmd").value.trim().toLowerCase();$("cmd").value="";if(!q)return;term("$ "+q,"#9cc8b7");
+ let q=$("cmd").value.trim().toLowerCase();
+ $("cmd").value="";
+ if(!q)return;
+ cmdHistory.push(q);histIndex=cmdHistory.length;
+ term("$ "+q,"#9cc8b7");
  const cmds={
- "help":"commands: help, status, vault, scan, trace, admin, clear",
- "status":"SYSTEM: ONLINE // VAULT: "+(key?"UNLOCKED":"LOCKED"),
+ "help":"commands: help, status, vault, scan, trace, admin, clear, connect, decrypt, override, route, whoami, hack",
+ "status":"SYSTEM: ONLINE // VAULT: "+(key?"UNLOCKED":"LOCKED")+" // TRACE: 07%",
  "vault":"LOCAL ENCRYPTED STORAGE ACTIVE",
- "scan":"SIMULATION: 12 NODES FOUND // 3 ALERT",
- "trace":"SIMULATED ROUTE: MASKED",
- "admin":"ADMIN SESSION: "+(adminSession?"ACTIVE":"LOCKED")
+ "scan":"[SIM] scanning virtual mesh... 12 nodes found // 3 alert nodes",
+ "trace":"[SIM] route trace obfuscated // hop count: 7",
+ "admin":"ADMIN SESSION: "+(adminSession?"ACTIVE":"LOCKED"),
+ "connect":"[SIM] establishing encrypted tunnel... CONNECTED",
+ "decrypt":"[SIM] cipher blocks analyzed... 31%  67%  100% // COMPLETE",
+ "override":"[SIM] access layer override accepted // sandbox only",
+ "route":"[SIM] relay path: NODE-03 > NODE-07 > CORE-GATE",
+ "whoami":"operator@cyber-vault // local simulation"
  };
- if(q==="clear")$("terminal").innerHTML="";else term(cmds[q]||"UNKNOWN SIMULATION COMMAND","#5ce8ff")
+ if(q==="clear")$("terminal").innerHTML="";
+ else if(q==="hack"){term("[SIM] HACK SEQUENCE INITIALIZED","#ffd86b");fakeSequence()}
+ else term(cmds[q]||"UNKNOWN SIMULATION COMMAND","#5ce8ff")
 }
-$("run").onclick=runCmd;$("cmd").addEventListener("keydown",e=>{if(e.key==="Enter")runCmd()});
-term("CYBER CONSOLE ONLINE");term("Type 'help'");
+
+async function fakeSequence(){
+ const lines=[
+  ["probing virtual gateway...",350],
+  ["handshake accepted",420],
+  ["loading cipher map [####......] 40%",300],
+  ["loading cipher map [########..] 80%",300],
+  ["loading cipher map [##########] 100%",320],
+  ["sandbox access token generated",420],
+  ["CORE-GATE simulation unlocked",450]
+ ];
+ for(const [msg,delay] of lines){
+   await new Promise(r=>setTimeout(r,delay));
+   term(msg,msg.includes("unlocked")?"#61ffb0":"#5ce8ff");
+ }
+}
+
+$("run").onclick=runCmd;$("cmd").addEventListener("keydown",e=>{
+ if(e.key==="Enter")runCmd();
+ if(e.key==="ArrowUp"&&cmdHistory.length){histIndex=Math.max(0,histIndex-1);$("cmd").value=cmdHistory[histIndex]||""}
+ if(e.key==="ArrowDown"&&cmdHistory.length){histIndex=Math.min(cmdHistory.length,histIndex+1);$("cmd").value=cmdHistory[histIndex]||""}
+});
+$("cmd").addEventListener("input",()=>{
+ $("cmd").style.boxShadow="0 0 14px rgba(97,255,176,.18)";
+ clearTimeout(window.__cmdGlow);
+ window.__cmdGlow=setTimeout(()=>$("cmd").style.boxShadow="none",120);
+});
+
+let movieTyping=false;
+let moviePos=0;
+const movieScript=[
+"[SIM] initializing virtual intrusion console...",
+"mesh.scan --sector=delta-7 --mode=passive",
+"[OK] 14 simulated nodes discovered",
+"route.select RELAY-03 RELAY-07 CORE-GATE",
+"[OK] encrypted sandbox route established",
+"cipher.map --target=VAULT-SIM --profile=fictional",
+"block[01] 0xA7F3  block[02] 0x19CC  block[03] 0x7B21",
+"handshake.verify --token=SIM-8841-ALPHA",
+"[OK] sandbox token accepted",
+"access.layer --simulate-override",
+"[OK] CORE-GATE visualizer unlocked",
+"trace.status = MASKED // simulation only",
+"operator@cyber-vault:~$ "
+].join("\\n");
+
+$("movieMode").onclick=()=>{
+ movieTyping=!movieTyping;
+ $("movieMode").textContent="MOVIE TYPING: "+(movieTyping?"ON":"OFF");
+ $("movieMode").classList.toggle("active",movieTyping);
+ if(movieTyping){
+   $("cmd").value="";
+   $("cmd").placeholder="何かキーを押してください…";
+   $("cmd").focus();
+   term("[MOVIE MODE] cinematic typing enabled","#ffd86b");
+ }else{
+   $("cmd").value="";
+   $("cmd").placeholder="command >";
+   term("[MOVIE MODE] disabled","#ffd86b");
+ }
+};
+
+$("movieReset").onclick=()=>{
+ moviePos=0;
+ $("cmd").value="";
+ term("[MOVIE MODE] script reset","#5ce8ff");
+};
+
+$("cmd").addEventListener("beforeinput",e=>{
+ if(!movieTyping)return;
+ e.preventDefault();
+ const chunk=movieScript.slice(moviePos,moviePos+3);
+ moviePos+=3;
+ if(moviePos>=movieScript.length)moviePos=0;
+ $("cmd").value+=chunk;
+ $("cmd").scrollLeft=$("cmd").scrollWidth;
+});
+
+$("cmd").addEventListener("keydown",e=>{
+ if(!movieTyping)return;
+ if(e.key==="Backspace"||e.key==="Delete"||e.key==="Enter"||e.key==="Tab"){
+   e.preventDefault();
+   const chunk=movieScript.slice(moviePos,moviePos+3);
+   moviePos+=3;
+   if(moviePos>=movieScript.length)moviePos=0;
+   $("cmd").value+=chunk;
+ }
+});
+
+term("CYBER CONSOLE ONLINE");term("Type 'help'");term("TIP: type 'hack' for cinematic simulation","#ffd86b");
 
 /* VISUALIZER */
 const nc=$("net"),nx=nc.getContext("2d");let N=[],L=[];
