@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>CYBER VAULT // ADMIN MODE</title>
+<style>
+:root{
+ --bg:#020606;--p:#06110f;--p2:#091915;--g:#61ffb0;--c:#5ce8ff;--r:#ff6677;
+ --y:#ffd86b;--t:#d8fff0;--muted:#8db7a6;--line:#174638
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--t);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+body{overflow-x:hidden}
+header{padding:14px 16px;background:#05100e;border-bottom:1px solid var(--line)}
+h1{margin:0;color:var(--g);font-size:18px;letter-spacing:.12em}.sub{font-size:10px;color:var(--muted);margin-top:3px}
+nav{display:flex;gap:6px;overflow-x:auto;padding:8px;background:#030a08;border-bottom:1px solid var(--line)}
+button,.filebtn,input{font:inherit}
+button,.filebtn{border:1px solid #245c4c;background:#0a1c17;color:var(--t);border-radius:9px;padding:9px 11px}
+nav button{white-space:nowrap}
+.active{border-color:var(--g)!important;color:var(--g)!important}
+.adminGlow{border-color:#8d7130!important;color:#ffe08a!important;box-shadow:0 0 12px rgba(255,216,107,.12)}
+main{padding:10px;max-width:1150px;margin:auto}.view{display:none}.view.activeView{display:block}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.panel{background:var(--p);border:1px solid var(--line);border-radius:12px;padding:12px}
+.panel h2{font-size:13px;color:var(--g);margin:0 0 10px}.panel p,.small{font-size:10px;line-height:1.55;color:#abd4c4}
+input[type=password],input[type=text]{width:100%;padding:11px;background:#020807;color:#e8fff6;border:1px solid #225748;border-radius:8px;margin:6px 0}
+.filebtn{display:block;text-align:center;margin-top:7px}input[type=file]{display:none}
+#drop{border:1px dashed #2a765f;border-radius:10px;padding:22px;text-align:center;color:#9fd5bf;margin-top:8px}
+#files{display:grid;gap:7px;margin-top:10px}
+.file{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:#081713;border:1px solid #174638;border-radius:9px;padding:9px}
+.name{font-size:11px;word-break:break-all}.meta{font-size:9px;color:#7fae9b;margin-top:3px}
+.actions{display:flex;gap:5px}.actions button{padding:6px 8px;font-size:9px}
+.danger{border-color:#70323b!important;color:#ff9ba5!important}.warn{border-color:#76601f!important;color:#ffe08a!important}
+.good{color:var(--g)}.cyan{color:var(--c)}.red{color:var(--r)}.yellow{color:var(--y)}
+.badge{display:inline-block;border:1px solid #285f50;border-radius:999px;padding:3px 7px;font-size:9px;color:#9cd9c0;margin:2px}
+#terminal,#adminLog{height:300px;background:#010504;border:1px solid #133b31;border-radius:9px;padding:10px;overflow:auto;font-size:10px;line-height:1.55}
+#cmdrow{display:flex;gap:6px;margin-top:7px}#cmd{flex:1;margin:0}
+.matrix{height:300px;position:relative;overflow:hidden;border:1px solid #153d33;border-radius:10px;background:#010504}
+.matrix canvas{width:100%;height:100%;display:block}
+#lockscreen,#adminGate{
+ position:fixed;inset:0;background:rgba(1,5,4,.97);z-index:50;display:flex;align-items:center;justify-content:center;padding:18px
+}
+#adminGate{display:none;z-index:60}
+.lockbox{width:min(440px,100%);background:#06110f;border:1px solid #22634f;border-radius:14px;padding:18px;box-shadow:0 0 40px #00ff8840}
+.lockbox h2{color:var(--g);margin-top:0}.status{font-size:10px;min-height:18px;margin-top:7px}
+.adminPanel{border-color:#6f5c2e;background:linear-gradient(180deg,#121006,#090b08)}
+.adminPanel h2{color:var(--y)}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.kpi div{background:#0a1512;border:1px solid #20483d;border-radius:9px;padding:9px;font-size:9px}.kpi b{display:block;font-size:16px;color:var(--g);margin-top:3px}
+#adminBanner{display:none;padding:7px 10px;background:#2b240d;border-bottom:1px solid #7d672d;color:#ffe9a0;font-size:10px;text-align:center}
+@media(max-width:720px){.grid{grid-template-columns:1fr}.kpi{grid-template-columns:1fr 1fr}.matrix{height:240px}}
+</style>
+</head>
+<body>
+
+<div id="lockscreen"><div class="lockbox">
+<h2>CYBER VAULT</h2>
+<p class="small">Vaultパスワードを入力してください。暗号化ファイルはこのブラウザのローカル保存領域に保存されます。</p>
+<div id="firstSetup" style="display:none">
+<input id="newPass" type="password" placeholder="新しいVaultパスワード">
+<input id="newPass2" type="password" placeholder="もう一度入力">
+<button id="createVault">VAULTを作成</button>
+</div>
+<div id="unlockBox" style="display:none">
+<input id="pass" type="password" placeholder="Vaultパスワード">
+<button id="unlock">UNLOCK</button>
+</div>
+<div id="lockStatus" class="status"></div>
+</div></div>
+
+<div id="adminGate"><div class="lockbox">
+<h2 style="color:#ffd86b">ADMIN AUTHENTICATION</h2>
+<p class="small">管理者パスワードはVaultパスワードとは別です。</p>
+<div id="adminFirst" style="display:none">
+<input id="adminNew" type="password" placeholder="管理者パスワード（12文字以上）">
+<input id="adminNew2" type="password" placeholder="もう一度入力">
+<button id="adminCreate" class="warn">ADMINを初期設定</button>
+</div>
+<div id="adminLogin" style="display:none">
+<input id="adminPass" type="password" placeholder="管理者パスワード">
+<button id="adminUnlock" class="warn">ENTER ADMIN MODE</button>
+</div>
+<button id="adminCancel">キャンセル</button>
+<div id="adminStatus" class="status"></div>
+</div></div>
+
+<header>
+<h1>CYBER VAULT // ADMIN MODE</h1>
+<div class="sub">LOCAL ENCRYPTED VAULT + ADMIN SECURITY CONSOLE</div>
+</header>
+<div id="adminBanner">ADMIN MODE ACTIVE — 自動ロックまで <span id="adminTimer">300</span> 秒</div>
+
+<nav>
+<button data-v="vault" class="active">VAULT</button>
+<button data-v="terminal">TERMINAL</button>
+<button data-v="network">NETWORK MAP</button>
+<button id="adminBtn" class="adminGlow">ADMIN</button>
+<button id="lockBtn">LOCK</button>
+</nav>
+
+<main>
+<section id="vault" class="view activeView">
+<div class="grid">
+<div class="panel">
+<h2>ENCRYPTED VAULT</h2>
+<div><span class="badge">AES-GCM</span><span class="badge">PBKDF2</span><span class="badge">LOCAL ONLY</span></div>
+<p>ファイルを暗号化して、このブラウザ内に保存します。</p>
+<label class="filebtn">＋ ファイルをVaultへ追加<input id="picker" type="file" multiple></label>
+<div id="drop">ここをタップしてファイルを選択</div>
+<div id="vaultStatus" class="status"></div>
+</div>
+<div class="panel">
+<h2>SECURITY CONTROL</h2>
+<button id="changePass">Vaultパスワード変更</button>
+<button id="wipe" class="danger">Vaultを完全消去</button>
+<p>SafariのWebサイトデータを削除するとVaultも消える可能性があります。重要ファイルの唯一の保管場所にはしないでください。</p>
+</div>
+</div>
+<div class="panel" style="margin-top:10px"><h2>FILES</h2><div id="files"></div></div>
+</section>
+
+<section id="terminal" class="view">
+<div class="panel">
+<h2>SIMULATED TERMINAL</h2>
+<div id="terminal"></div>
+<div id="cmdrow"><input id="cmd" type="text" placeholder="help と入力"><button id="run">RUN</button></div>
+<p class="small">演出用の架空ターミナルです。実際の端末・アカウント・ネットワークへ接続しません。</p>
+</div>
+</section>
+
+<section id="network" class="view">
+<div class="grid">
+<div class="panel"><h2>NETWORK VISUALIZER</h2><div class="matrix"><canvas id="net"></canvas></div></div>
+<div class="panel"><h2>SIMULATION MODULES</h2>
+<button id="scanSim">SIMULATE NODE SCAN</button>
+<button id="reroute">REROUTE VISUALIZER</button>
+<div id="simlog" class="small" style="margin-top:10px"></div>
+</div>
+</div>
+</section>
+
+<section id="admin" class="view">
+<div class="panel adminPanel">
+<h2>ADMIN CONTROL CENTER</h2>
+<div class="kpi">
+<div>VAULT FILES<b id="kFiles">0</b></div>
+<div>FAILED LOGIN<b id="kFails">0</b></div>
+<div>ADMIN SESSION<b id="kSession">OFF</b></div>
+</div>
+</div>
+
+<div class="grid" style="margin-top:10px">
+<div class="panel adminPanel">
+<h2>ADMIN SECURITY</h2>
+<button id="adminChange" class="warn">管理者パスワード変更</button>
+<button id="adminEmergency" class="danger">緊急ロック</button>
+<button id="adminLogout">管理者モード終了</button>
+<p>管理者ログインに5回失敗すると60秒間ロックします。管理者モードは5分間操作がないと自動終了します。</p>
+</div>
+
+<div class="panel adminPanel">
+<h2>BACKUP / RESTORE</h2>
+<button id="exportBackup">暗号化Vaultバックアップを書き出す</button>
+<label class="filebtn">暗号化バックアップを読み込む<input id="importBackup" type="file" accept=".json,application/json"></label>
+<p>バックアップは暗号化済みデータを含みます。復元には元のVaultパスワードが必要です。</p>
+</div>
+</div>
+
+<div class="panel adminPanel" style="margin-top:10px">
+<h2>ADMIN LOG</h2>
+<div id="adminLog"></div>
+</div>
+</section>
+</main>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let db=null,key=null,salt=null;
+let adminSession=false,adminLastActivity=0,adminFails=0,adminLockedUntil=0;
+const ADMIN_TIMEOUT=300000;
+
+function b64(buf){return btoa(String.fromCharCode(...new Uint8Array(buf)))}
+function unb64(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+function openDB(){return new Promise((res,rej)=>{let r=indexedDB.open("CyberVaultAdminDB",1);r.onupgradeneeded=()=>{let d=r.result;if(!d.objectStoreNames.contains("files"))d.createObjectStore("files",{keyPath:"id"});if(!d.objectStoreNames.contains("meta"))d.createObjectStore("meta")};r.onsuccess=()=>{db=r.result;res(db)};r.onerror=()=>rej(r.error)})}
+function getMeta(k){return new Promise((res,rej)=>{let r=db.transaction("meta").objectStore("meta").get(k);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+function setMeta(k,v){return new Promise((res,rej)=>{let r=db.transaction("meta","readwrite").objectStore("meta").put(v,k);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
+function delMeta(k){return new Promise((res,rej)=>{let r=db.transaction("meta","readwrite").objectStore("meta").delete(k);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
+
+async function derive(pass,s,iters=250000){
+ let base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pass),"PBKDF2",false,["deriveKey"]);
+ return crypto.subtle.deriveKey({name:"PBKDF2",salt:s,iterations:iters,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"])
+}
+async function verifier(k,label){
+ let iv=crypto.getRandomValues(new Uint8Array(12)),plain=new TextEncoder().encode(label);
+ let enc=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,plain);return {iv:b64(iv),data:b64(enc)}
+}
+async function checkVerifier(k,v,label){
+ try{let out=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(v.iv)},k,unb64(v.data));return new TextDecoder().decode(out)===label}catch{return false}
+}
+
+async function boot(){
+ await openDB();
+ let s=await getMeta("vaultSalt");
+ if(!s){$("firstSetup").style.display="block"}else{$("unlockBox").style.display="block";salt=unb64(s)}
+ adminFails=Number(await getMeta("adminFails")||0);
+ adminLockedUntil=Number(await getMeta("adminLockedUntil")||0);
+ refreshAdminKPI();
+}
+boot();
+
+$("createVault").onclick=async()=>{
+ let a=$("newPass").value,b=$("newPass2").value;
+ if(a.length<8)return $("lockStatus").textContent="8文字以上にしてください";
+ if(a!==b)return $("lockStatus").textContent="パスワードが一致しません";
+ salt=crypto.getRandomValues(new Uint8Array(16));key=await derive(a,salt);
+ await setMeta("vaultSalt",b64(salt));await setMeta("vaultVerify",await verifier(key,"CYBER-VAULT-OK"));
+ unlockUI();await renderFiles();adminLog("Vault created");
+};
+$("unlock").onclick=async()=>{
+ let v=await getMeta("vaultVerify"),k=await derive($("pass").value,salt);
+ if(!await checkVerifier(k,v,"CYBER-VAULT-OK"))return $("lockStatus").textContent="ACCESS DENIED";
+ key=k;unlockUI();await renderFiles();adminLog("Vault unlocked");
+};
+function unlockUI(){$("lockscreen").style.display="none";$("pass").value="";$("lockStatus").textContent=""}
+function lockAll(){key=null;endAdmin();$("lockscreen").style.display="flex";$("firstSetup").style.display="none";$("unlockBox").style.display="block";adminLog("Emergency/full lock")}
+$("lockBtn").onclick=lockAll;
+
+function putFile(o){return new Promise((res,rej)=>{let r=db.transaction("files","readwrite").objectStore("files").put(o);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
+function allFiles(){return new Promise((res,rej)=>{let r=db.transaction("files").objectStore("files").getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+function delFile(id){return new Promise((res,rej)=>{let r=db.transaction("files","readwrite").objectStore("files").delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
+
+async function addFiles(list){
+ if(!key)return;
+ for(const f of list){
+   let iv=crypto.getRandomValues(new Uint8Array(12)),buf=await f.arrayBuffer();
+   let enc=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,buf);
+   await putFile({id:crypto.randomUUID(),name:f.name,type:f.type||"application/octet-stream",size:f.size,date:Date.now(),iv:b64(iv),data:enc});
+ }
+ $("vaultStatus").textContent=list.length+" FILE(S) ENCRYPTED";
+ adminLog("Added "+list.length+" file(s)");
+ await renderFiles();
+}
+$("picker").onchange=e=>addFiles([...e.target.files]);
+$("drop").onclick=()=>$("picker").click();
+
+async function renderFiles(){
+ let fs=await allFiles(),box=$("files");box.innerHTML="";$("kFiles").textContent=fs.length;
+ if(!fs.length){box.innerHTML='<div class="small">VAULT EMPTY</div>';return}
+ fs.sort((a,b)=>b.date-a.date);
+ for(const f of fs){
+  let d=document.createElement("div");d.className="file";
+  let left=document.createElement("div");left.innerHTML=`<div class="name">${esc(f.name)}</div><div class="meta">${fmt(f.size)} • ENCRYPTED</div>`;
+  let acts=document.createElement("div");acts.className="actions";
+  let open=document.createElement("button");open.textContent="復号";open.onclick=()=>downloadFile(f);
+  let del=document.createElement("button");del.textContent="削除";del.className="danger";del.onclick=async()=>{if(confirm("このファイルをVaultから削除しますか？")){await delFile(f.id);adminLog("Deleted file: "+f.name);renderFiles()}};
+  acts.append(open,del);d.append(left,acts);box.appendChild(d);
+ }
+}
+function esc(s){let d=document.createElement("div");d.textContent=s;return d.innerHTML}
+function fmt(n){return n<1024?n+" B":n<1048576?(n/1024).toFixed(1)+" KB":(n/1048576).toFixed(1)+" MB"}
+async function downloadFile(f){
+ try{
+  let plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(f.iv)},key,f.data);
+  let blob=new Blob([plain],{type:f.type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=f.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  adminLog("Decrypted/downloaded: "+f.name)
+ }catch{$("vaultStatus").textContent="DECRYPT ERROR"}
+}
+
+$("changePass").onclick=async()=>{
+ let old=prompt("現在のVaultパスワード");if(old===null)return;
+ let v=await getMeta("vaultVerify"),oldKey=await derive(old,salt);if(!await checkVerifier(oldKey,v,"CYBER-VAULT-OK"))return alert("パスワードが違います");
+ let np=prompt("新しいVaultパスワード（8文字以上）");if(!np||np.length<8)return;
+ let fs=await allFiles(),plain=[];
+ for(const f of fs)plain.push([f,await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(f.iv)},oldKey,f.data)]);
+ let ns=crypto.getRandomValues(new Uint8Array(16)),nk=await derive(np,ns);
+ for(const [f,p] of plain){let iv=crypto.getRandomValues(new Uint8Array(12));f.iv=b64(iv);f.data=await crypto.subtle.encrypt({name:"AES-GCM",iv},nk,p);await putFile(f)}
+ salt=ns;key=nk;await setMeta("vaultSalt",b64(ns));await setMeta("vaultVerify",await verifier(nk,"CYBER-VAULT-OK"));adminLog("Vault password changed");alert("Vaultパスワードを変更しました")
+};
+$("wipe").onclick=async()=>{
+ if(!confirm("Vault内の暗号化ファイルをすべて削除します。元に戻せません。"))return;
+ let fs=await allFiles();for(const f of fs)await delFile(f.id);adminLog("Vault wiped");await renderFiles()
+};
+
+/* ADMIN */
+$("adminBtn").onclick=async()=>{
+ if(!key)return alert("先にVaultを解除してください");
+ if(adminSession){showView("admin");return}
+ let s=await getMeta("adminSalt");
+ $("adminGate").style.display="flex";
+ $("adminStatus").textContent="";
+ if(!s){$("adminFirst").style.display="block";$("adminLogin").style.display="none"}
+ else{$("adminFirst").style.display="none";$("adminLogin").style.display="block"}
+};
+$("adminCancel").onclick=()=>{$("adminGate").style.display="none"};
+
+function strongEnough(p){
+ return p.length>=12 && /[A-Z]/.test(p) && /[a-z]/.test(p) && /[0-9]/.test(p) && /[^A-Za-z0-9]/.test(p)
+}
+$("adminCreate").onclick=async()=>{
+ let a=$("adminNew").value,b=$("adminNew2").value;
+ if(!strongEnough(a))return $("adminStatus").textContent="12文字以上＋大文字・小文字・数字・記号を含めてください";
+ if(a!==b)return $("adminStatus").textContent="パスワードが一致しません";
+ let s=crypto.getRandomValues(new Uint8Array(16)),k=await derive(a,s,320000);
+ await setMeta("adminSalt",b64(s));await setMeta("adminVerify",await verifier(k,"CYBER-ADMIN-OK"));
+ adminFails=0;await setMeta("adminFails",0);await setMeta("adminLockedUntil",0);
+ $("adminGate").style.display="none";startAdmin();adminLog("Admin initialized");showView("admin")
+};
+$("adminUnlock").onclick=async()=>{
+ let now=Date.now();
+ if(now<adminLockedUntil)return $("adminStatus").textContent="LOCKED: あと "+Math.ceil((adminLockedUntil-now)/1000)+" 秒";
+ let s=unb64(await getMeta("adminSalt")),v=await getMeta("adminVerify"),k=await derive($("adminPass").value,s,320000);
+ if(!await checkVerifier(k,v,"CYBER-ADMIN-OK")){
+   adminFails++;await setMeta("adminFails",adminFails);adminLog("Admin login failed");
+   if(adminFails>=5){adminLockedUntil=Date.now()+60000;await setMeta("adminLockedUntil",adminLockedUntil);adminFails=0;await setMeta("adminFails",0);$("adminStatus").textContent="5回失敗：60秒ロック"}else $("adminStatus").textContent="ACCESS DENIED ("+adminFails+"/5)";
+   refreshAdminKPI();return;
+ }
+ adminFails=0;await setMeta("adminFails",0);$("adminGate").style.display="none";$("adminPass").value="";startAdmin();adminLog("Admin login success");showView("admin")
+};
+function startAdmin(){adminSession=true;adminLastActivity=Date.now();$("adminBanner").style.display="block";refreshAdminKPI()}
+function endAdmin(){adminSession=false;$("adminBanner").style.display="none";refreshAdminKPI();if($("admin").classList.contains("activeView"))showView("vault")}
+function touchAdmin(){if(adminSession)adminLastActivity=Date.now()}
+["pointerdown","keydown","touchstart"].forEach(ev=>document.addEventListener(ev,touchAdmin,{passive:true}));
+setInterval(()=>{
+ if(adminSession){
+   let remain=Math.max(0,ADMIN_TIMEOUT-(Date.now()-adminLastActivity));
+   $("adminTimer").textContent=Math.ceil(remain/1000);
+   if(remain<=0){adminLog("Admin auto-locked");endAdmin()}
+ }
+},1000);
+
+$("adminLogout").onclick=()=>{adminLog("Admin logout");endAdmin();showView("vault")};
+$("adminEmergency").onclick=()=>{adminLog("Emergency lock activated");lockAll()};
+$("adminChange").onclick=async()=>{
+ if(!adminSession)return;
+ let cur=prompt("現在の管理者パスワード");if(cur===null)return;
+ let s=unb64(await getMeta("adminSalt")),v=await getMeta("adminVerify"),k=await derive(cur,s,320000);
+ if(!await checkVerifier(k,v,"CYBER-ADMIN-OK"))return alert("管理者パスワードが違います");
+ let np=prompt("新しい管理者パスワード（12文字以上・大文字/小文字/数字/記号）");if(!np||!strongEnough(np))return alert("条件を満たしていません");
+ let ns=crypto.getRandomValues(new Uint8Array(16)),nk=await derive(np,ns,320000);
+ await setMeta("adminSalt",b64(ns));await setMeta("adminVerify",await verifier(nk,"CYBER-ADMIN-OK"));adminLog("Admin password changed");alert("管理者パスワードを変更しました")
+};
+
+async function adminLog(msg){
+ if(!db)return;
+ let logs=await getMeta("adminLogs")||[];
+ logs.push({t:Date.now(),m:msg});logs=logs.slice(-100);await setMeta("adminLogs",logs);
+ renderAdminLog()
+}
+async function renderAdminLog(){
+ if(!db)return;
+ let logs=await getMeta("adminLogs")||[],box=$("adminLog");box.innerHTML="";
+ logs.slice().reverse().forEach(e=>{let d=document.createElement("div");d.textContent=new Date(e.t).toLocaleString()+"  "+e.m;box.appendChild(d)})
+}
+async function refreshAdminKPI(){$("kFails").textContent=adminFails;$("kSession").textContent=adminSession?"ON":"OFF";if(db){$("kFiles").textContent=(await allFiles()).length;renderAdminLog()}}
+
+/* BACKUP */
+$("exportBackup").onclick=async()=>{
+ if(!adminSession)return;
+ let fs=await allFiles();
+ let packed=fs.map(f=>({...f,data:b64(f.data)}));
+ let meta={vaultSalt:await getMeta("vaultSalt"),vaultVerify:await getMeta("vaultVerify")};
+ let blob=new Blob([JSON.stringify({version:1,meta,files:packed})],{type:"application/json"});
+ let u=URL.createObjectURL(blob),a=document.createElement("a");a.href=u;a.download="cyber-vault-backup.json";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+ adminLog("Encrypted backup exported")
+};
+$("importBackup").onchange=async e=>{
+ if(!adminSession)return;
+ try{
+  let txt=await e.target.files[0].text(),o=JSON.parse(txt);
+  if(!o||o.version!==1||!Array.isArray(o.files))throw new Error();
+  if(!confirm("現在のVaultにバックアップ内容を追加しますか？"))return;
+  for(const f of o.files){f.data=unb64(f.data).buffer;await putFile(f)}
+  adminLog("Encrypted backup imported");renderFiles()
+ }catch{alert("バックアップ形式を読み込めませんでした")}
+};
+
+/* NAV */
+function showView(id){
+ document.querySelectorAll("nav button[data-v]").forEach(x=>x.classList.toggle("active",x.dataset.v===id));
+ document.querySelectorAll(".view").forEach(v=>v.classList.remove("activeView"));
+ $(id).classList.add("activeView");if(id==="network")resizeNet();if(id==="admin")refreshAdminKPI()
+}
+document.querySelectorAll("nav button[data-v]").forEach(b=>b.onclick=()=>showView(b.dataset.v));
+
+/* TERMINAL - FICTIONAL ONLY */
+function term(t,c="#61ffb0"){let d=document.createElement("div");d.textContent="> "+t;d.style.color=c;$("terminal").appendChild(d);$("terminal").scrollTop=$("terminal").scrollHeight}
+function runCmd(){
+ let q=$("cmd").value.trim().toLowerCase();$("cmd").value="";if(!q)return;term("$ "+q,"#9cc8b7");
+ const cmds={
+ "help":"commands: help, status, vault, scan, trace, admin, clear",
+ "status":"SYSTEM: ONLINE // VAULT: "+(key?"UNLOCKED":"LOCKED"),
+ "vault":"LOCAL ENCRYPTED STORAGE ACTIVE",
+ "scan":"SIMULATION: 12 NODES FOUND // 3 ALERT",
+ "trace":"SIMULATED ROUTE: MASKED",
+ "admin":"ADMIN SESSION: "+(adminSession?"ACTIVE":"LOCKED")
+ };
+ if(q==="clear")$("terminal").innerHTML="";else term(cmds[q]||"UNKNOWN SIMULATION COMMAND","#5ce8ff")
+}
+$("run").onclick=runCmd;$("cmd").addEventListener("keydown",e=>{if(e.key==="Enter")runCmd()});
+term("CYBER CONSOLE ONLINE");term("Type 'help'");
+
+/* VISUALIZER */
+const nc=$("net"),nx=nc.getContext("2d");let N=[],L=[];
+function resizeNet(){
+ let r=nc.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);nc.width=r.width*d;nc.height=r.height*d;nx.setTransform(d,0,0,d,0,0);
+ N=Array.from({length:14},(_,i)=>({x:30+Math.random()*(r.width-60),y:30+Math.random()*(r.height-60),a:i%5===0}));
+ L=Array.from({length:20},()=>[Math.floor(Math.random()*N.length),Math.floor(Math.random()*N.length)]);drawNet()
+}
+function drawNet(){let r=nc.getBoundingClientRect();nx.clearRect(0,0,r.width,r.height);nx.strokeStyle="#174638";L.forEach(([a,b])=>{nx.beginPath();nx.moveTo(N[a].x,N[a].y);nx.lineTo(N[b].x,N[b].y);nx.stroke()});N.forEach(n=>{nx.fillStyle=n.a?"#ff6677":"#61ffb0";nx.beginPath();nx.arc(n.x,n.y,5,0,Math.PI*2);nx.fill()})}
+$("scanSim").onclick=()=>{$("simlog").innerHTML="SCAN COMPLETE<br>14 simulated nodes detected<br>3 alert nodes";resizeNet()};
+$("reroute").onclick=()=>{$("simlog").innerHTML="ROUTE MAP REGENERATED";resizeNet()};
+window.addEventListener("resize",()=>{if($("network").classList.contains("activeView"))resizeNet()});
+</script>
+</body>
+</html>
