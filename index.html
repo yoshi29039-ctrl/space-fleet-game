@@ -34,7 +34,7 @@ input[type=password],input[type=text]{width:100%;padding:11px;background:#020807
 .danger{border-color:#70323b!important;color:#ff9ba5!important}.warn{border-color:#76601f!important;color:#ffe08a!important}
 .good{color:var(--g)}.cyan{color:var(--c)}.red{color:var(--r)}.yellow{color:var(--y)}
 .badge{display:inline-block;border:1px solid #285f50;border-radius:999px;padding:3px 7px;font-size:9px;color:#9cd9c0;margin:2px}
-#terminal,#adminLog{height:300px;background:#010504;border:1px solid #133b31;border-radius:9px;padding:10px;overflow:auto;font-size:10px;line-height:1.55}
+#terminal,#adminLog{height:300px;background:#010504;border:1px solid #133b31;border-radius:9px;padding:10px;overflow:auto;font-size:10px;line-height:1.55}#terminal{height:430px;outline:none;white-space:pre-wrap;cursor:text;box-shadow:inset 0 0 24px rgba(0,255,120,.035)}
 #cmdrow{display:flex;gap:6px;margin-top:7px}#cmd{flex:1;margin:0}
 .matrix{height:300px;position:relative;overflow:hidden;border:1px solid #153d33;border-radius:10px;background:#010504}
 .matrix canvas{width:100%;height:100%;display:block}
@@ -122,7 +122,7 @@ input[type=password],input[type=text]{width:100%;padding:11px;background:#020807
 <section id="terminal" class="view">
 <div class="panel">
 <h2>SIMULATED TERMINAL</h2>
-<div id="terminal"></div>
+<div id="terminal" tabindex="0" aria-label="Cinematic terminal typing area"></div>
 <div style="margin-top:8px;padding:8px;border:1px solid #275f50;border-radius:8px;background:#04100d">
 <div style="font-size:10px;color:#ffd86b">LIVE SIMULATION</div>
 <div style="font-size:10px;color:#abd4c4;margin-top:4px">入力例： <b>scan</b> / <b>connect</b> / <b>decrypt</b> / <b>route</b> / <b>hack</b></div>
@@ -132,7 +132,7 @@ input[type=password],input[type=text]{width:100%;padding:11px;background:#020807
 <button id="movieMode" class="warn">MOVIE TYPING: OFF</button>
 <button id="movieReset">演出リセット</button>
 </div>
-<div class="small" style="margin-top:6px">MOVIE TYPINGをONにすると、どの文字キーを押しても架空のコードが自動入力されます。</div>
+<div class="small" style="margin-top:6px">MOVIE TYPINGをONにして、上の大きなTERMINAL枠をタップ。どのキーを押しても、枠内に映画風の架空コードが流れます。</div>
 <p class="small">演出用の架空ターミナルです。実際の端末・アカウント・ネットワークへ接続しません。</p>
 </div>
 </section>
@@ -446,9 +446,13 @@ $("cmd").addEventListener("input",()=>{
  window.__cmdGlow=setTimeout(()=>$("cmd").style.boxShadow="none",120);
 });
 
+
 let movieTyping=false;
 let moviePos=0;
-const movieScript=[
+let movieLineBuffer="";
+let movieKeyCount=0;
+
+const movieLines=[
 "[SIM] initializing virtual intrusion console...",
 "mesh.scan --sector=delta-7 --mode=passive",
 "[OK] 14 simulated nodes discovered",
@@ -461,53 +465,81 @@ const movieScript=[
 "access.layer --simulate-override",
 "[OK] CORE-GATE visualizer unlocked",
 "trace.status = MASKED // simulation only",
-"operator@cyber-vault:~$ "
-].join("\\n");
+"packet.stream = 7F A1 9C 02 88 4D 31 B7",
+"relay.auth = ACCEPTED",
+"virtual-shell@cyber-vault:~$ "
+];
+
+function moviePrintChunk(){
+ if(!movieTyping)return;
+ if(moviePos>=movieLines.length)moviePos=0;
+
+ const target=movieLines[moviePos];
+ const step=2+Math.floor(Math.random()*3);
+ movieLineBuffer += target.slice(movieLineBuffer.length, movieLineBuffer.length+step);
+ movieKeyCount++;
+
+ if(movieLineBuffer.length>=target.length || movieKeyCount%18===0){
+   term(movieLineBuffer, target.includes("OK")||target.includes("ACCEPTED")?"#61ffb0":"#7dffc4");
+   movieLineBuffer="";
+   moviePos++;
+ } else {
+   let ghost=document.getElementById("movieGhost");
+   if(!ghost){
+     ghost=document.createElement("div");
+     ghost.id="movieGhost";
+     ghost.style.color="#7dffc4";
+     $("terminal").appendChild(ghost);
+   }
+   ghost.textContent="> "+movieLineBuffer+"▋";
+ }
+ $("terminal").scrollTop=$("terminal").scrollHeight;
+}
 
 $("movieMode").onclick=()=>{
  movieTyping=!movieTyping;
  $("movieMode").textContent="MOVIE TYPING: "+(movieTyping?"ON":"OFF");
  $("movieMode").classList.toggle("active",movieTyping);
  if(movieTyping){
-   $("cmd").value="";
-   $("cmd").placeholder="何かキーを押してください…";
-   $("cmd").focus();
-   term("[MOVIE MODE] cinematic typing enabled","#ffd86b");
+   $("cmd").blur();
+   $("terminal").focus();
+   term("[MOVIE MODE] direct terminal typing enabled","#ffd86b");
+   term("Tap this terminal and press any keys...","#5ce8ff");
  }else{
-   $("cmd").value="";
-   $("cmd").placeholder="command >";
+   const ghost=document.getElementById("movieGhost"); if(ghost)ghost.remove();
+   movieLineBuffer="";
    term("[MOVIE MODE] disabled","#ffd86b");
  }
 };
 
 $("movieReset").onclick=()=>{
- moviePos=0;
- $("cmd").value="";
+ moviePos=0; movieLineBuffer=""; movieKeyCount=0;
+ const ghost=document.getElementById("movieGhost"); if(ghost)ghost.remove();
  term("[MOVIE MODE] script reset","#5ce8ff");
+ if(movieTyping)$("terminal").focus();
 };
 
-$("cmd").addEventListener("beforeinput",e=>{
+$("terminal").addEventListener("pointerdown",()=>{
+ if(movieTyping)setTimeout(()=>$("terminal").focus(),0);
+});
+
+$("terminal").addEventListener("keydown",e=>{
  if(!movieTyping)return;
  e.preventDefault();
- const chunk=movieScript.slice(moviePos,moviePos+3);
- moviePos+=3;
- if(moviePos>=movieScript.length)moviePos=0;
- $("cmd").value+=chunk;
- $("cmd").scrollLeft=$("cmd").scrollWidth;
+ moviePrintChunk();
 });
 
-$("cmd").addEventListener("keydown",e=>{
+document.addEventListener("keydown",e=>{
  if(!movieTyping)return;
- if(e.key==="Backspace"||e.key==="Delete"||e.key==="Enter"||e.key==="Tab"){
-   e.preventDefault();
-   const chunk=movieScript.slice(moviePos,moviePos+3);
-   moviePos+=3;
-   if(moviePos>=movieScript.length)moviePos=0;
-   $("cmd").value+=chunk;
- }
+ if(document.activeElement===$("terminal"))return;
+ const tag=(document.activeElement?.tagName||"").toLowerCase();
+ if(tag==="input"||tag==="textarea")return;
+ e.preventDefault();
+ moviePrintChunk();
 });
 
-term("CYBER CONSOLE ONLINE");term("Type 'help'");term("TIP: type 'hack' for cinematic simulation","#ffd86b");
+
+term("CYBER CONSOLE ONLINE");term("Type 'help' for command mode");term("MOVIE TYPINGをONにすると大画面へ直接入力演出","#ffd86b");
 
 /* VISUALIZER */
 const nc=$("net"),nx=nc.getContext("2d");let N=[],L=[];
